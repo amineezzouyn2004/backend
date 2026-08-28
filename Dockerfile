@@ -18,3 +18,10 @@ COPY --from=builder /app /app
 USER hanin
 EXPOSE 8000
 CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]
+
+FROM runtime AS migrate
+CMD ["alembic", "upgrade", "head"]
+
+# Last stage is the default `docker build` / EasyPanel target when none is set.
+FROM runtime AS api
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers", "--forwarded-allow-ips=127.0.0.1"]
