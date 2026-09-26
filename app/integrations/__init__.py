@@ -1,1 +1,1 @@
-"""External integrations remain disabled in Phase 3."""
+"""External integrations remain disabled by default."""

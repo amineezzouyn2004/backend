@@ -1,5 +1,6 @@
 import hashlib
 import json
+import logging
 import secrets
 import unicodedata
 import uuid
@@ -8,6 +9,7 @@ from dataclasses import dataclass
 from sqlalchemy.orm import Session
 
 from app.config import Settings
+from app.integrations.minfraud import build_outbox_payload, is_minfraud_ready
 from app.models.order import (
     AttributionRecord, ConsentRecord, IdempotencyRecord, Order, OrderItem,
     OrderStatus, OrderStatusHistory,
@@ -18,13 +20,39 @@ from app.schemas.order import OrderCreate, OrderPublic, OrderStatusEntryPublic
 from app.services.catalog import quote_cart
 from app.services.phone import normalize_moroccan_mobile
 
+logger = logging.getLogger("hanin.orders")
+
 
 class IdempotencyConflict(ValueError):
     pass
 
 
+class InvalidCity(ValueError):
+    """Raised when the client-provided city is missing or not on the allow-list."""
+
+
 def normalize_name(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split())
+
+
+def resolve_city(payload_city: str | None, allowed: list[str]) -> str | None:
+    """Return the normalized city string when the allow-list is populated.
+
+    When `allowed` is empty, city is not enforced server-side; we simply drop
+    the value (returning None) so it never reaches persistent storage. When
+    `allowed` is non-empty, the client must supply a value that matches one of
+    the entries after trimming.
+    """
+    if not allowed:
+        return None
+    if payload_city is None:
+        raise InvalidCity("missing")
+    normalized = payload_city.strip()
+    if not normalized:
+        raise InvalidCity("empty")
+    if normalized not in allowed:
+        raise InvalidCity("unsupported")
+    return normalized
 
 
 def request_fingerprint(payload: OrderCreate, normalized_name: str, phone: str) -> str:
@@ -85,9 +113,16 @@ def create_order(
     settings: Settings,
     *,
     user_agent: str | None = None,
+    client_ip: str | None = None,
+    accept_language: str | None = None,
 ) -> CreateOrderResult:
     name = normalize_name(payload.full_name)
     phone = normalize_moroccan_mobile(payload.phone)
+    # City is validated but currently never persisted (no dedicated column and
+    # Alembic is disabled locally). When the allow-list is populated, we record
+    # the normalized value in the initial status_history.safe_metadata JSON so
+    # operations can audit it without a schema migration.
+    resolved_city = resolve_city(payload.city, settings.allowed_city_list)
     fingerprint = request_fingerprint(payload, name, phone)
     repository = OrderRepository(db)
     existing = repository.find_idempotency("create_order", idempotency_key)
@@ -157,13 +192,18 @@ def create_order(
                 saving_minor=item.saving_minor,
             )
         )
+    safe_metadata: dict[str, object] = {}
+    if resolved_city is not None:
+        safe_metadata["city"] = resolved_city
+    if settings.sandbox_mode:
+        safe_metadata["sandbox"] = True
     order.status_history.append(
         OrderStatusHistory(
             from_status=None,
             to_status=OrderStatus.PENDING,
             reason_code="order_submitted",
             actor_type="customer",
-            safe_metadata={},
+            safe_metadata=safe_metadata,
         )
     )
     db.add(order)
@@ -189,7 +229,46 @@ def create_order(
             destinations.append("tiktok")
         if settings.snap_capi_enabled:
             destinations.append("snap")
+    if is_minfraud_ready(settings):
+        destinations.append("minfraud")
+    elif settings.maxmind_minfraud_enabled:
+        logger.warning("minfraud_skipped_missing_credentials")
     for destination in destinations:
+        if destination == "minfraud":
+            db.add(
+                OutboxEvent(
+                    internal_event_id=event_id,
+                    aggregate_type="order",
+                    aggregate_id=order.id,
+                    event_type="OrderSubmitted",
+                    destination="minfraud",
+                    payload_version=1,
+                    payload=build_outbox_payload(
+                        order_id=str(order.id),
+                        public_reference=order.public_reference,
+                        full_name=name,
+                        phone_e164=phone,
+                        subtotal_minor=order.subtotal_minor,
+                        discount_minor=order.discount_minor,
+                        total_minor=order.total_minor,
+                        currency=order.currency,
+                        offer_code=order.offer_code,
+                        created_at=order.created_at.isoformat() if order.created_at else None,
+                        client_ip=client_ip,
+                        user_agent=user_agent,
+                        accept_language=accept_language,
+                        items=[
+                            {
+                                "item_id": item.sku_snapshot or item.product_slug,
+                                "quantity": item.quantity,
+                                "unit_minor": item.unit_minor,
+                            }
+                            for item in order.items
+                        ],
+                    ),
+                )
+            )
+            continue
         payload_data: dict[str, object] = {
             "schema_version": 2,
             "event_id": str(event_id),

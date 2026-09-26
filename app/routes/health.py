@@ -19,12 +19,11 @@ def live() -> dict[str, str]:
 def ready(db: Session = Depends(get_db)) -> dict[str, str]:
     try:
         db.execute(text("SELECT 1"))
-        db.execute(text("SELECT version_num FROM alembic_version LIMIT 1"))
     except SQLAlchemyError as exc:
         raise DomainProblem(
             status=503,
             code="NOT_READY",
             title="الخدمة غير جاهزة",
-            detail="قاعدة البيانات أو مخططها غير جاهز.",
+            detail="قاعدة البيانات غير متصلة.",
         ) from exc
     return {"status": "ready"}

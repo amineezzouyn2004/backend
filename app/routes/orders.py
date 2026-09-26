@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session
 from app.config import get_settings
 from app.db.session import get_db
 from app.errors import DomainProblem
+from app.integrations.minfraud import client_ip_for_minfraud, is_minfraud_ready
 from app.models.tracking import TrackingEvent
 from app.repositories.orders import OrderRepository
 from app.schemas.order import OrderCreate, OrderPublic
@@ -14,7 +15,12 @@ from app.services.catalog import (
     DuplicateProductError, OfferUnavailableError,
     ProductOfferUnconfiguredError, UpsellUnavailableError,
 )
-from app.services.orders import IdempotencyConflict, create_order, to_public
+from app.services.orders import (
+    IdempotencyConflict,
+    InvalidCity,
+    create_order,
+    to_public,
+)
 from app.services.phone import InvalidMoroccanPhone
 
 
@@ -30,12 +36,20 @@ def create(
     db: Session = Depends(get_db),
 ) -> OrderPublic:
     try:
+        settings = get_settings()
+        client_ip = None
+        if is_minfraud_ready(settings):
+            client_ip = client_ip_for_minfraud(request, settings.trusted_proxy_ip_list)
         result = create_order(
-            db, payload, idempotency_key, get_settings(),
+            db, payload, idempotency_key, settings,
             user_agent=request.headers.get("user-agent"),
+            client_ip=client_ip,
+            accept_language=request.headers.get("accept-language"),
         )
     except InvalidMoroccanPhone as exc:
-        raise DomainProblem(422, "PHONE_INVALID", "رقم الهاتف غير صالح", "راجعي رقم الهاتف المغربي وأدخليه من دون نص إضافي.") from exc
+        raise DomainProblem(422, "PHONE_INVALID", "رقم الهاتف غير صالح", "يرجى إدخال رقم هاتف مغربي صحيح.") from exc
+    except InvalidCity as exc:
+        raise DomainProblem(422, "CITY_INVALID", "المدينة غير صالحة", "يرجى اختيار المدينة.") from exc
     except OfferUnavailableError as exc:
         raise DomainProblem(409, "OFFER_UNAVAILABLE", "العرض غير متاح", "اختاري عرضًا متاحًا ثم أعيدي المحاولة.") from exc
     except ProductOfferUnconfiguredError as exc:

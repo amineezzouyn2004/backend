@@ -1,6 +1,7 @@
 from functools import lru_cache
+from typing import Literal
 
-from pydantic import Field, model_validator
+from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -40,6 +41,23 @@ class Settings(BaseSettings):
     snap_capi_enabled: bool = False
     snap_pixel_id: str | None = None
     snap_access_token: str | None = None
+    maxmind_minfraud_enabled: bool = False
+    maxmind_account_id: str | None = None
+    maxmind_license_key: str | None = None
+    maxmind_minfraud_service: Literal["score", "insights", "factors"] = "score"
+    maxmind_minfraud_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
+    maxmind_minfraud_host: str = "minfraud.maxmind.com"
+    trusted_proxy_ips: str = ""
+    # Sandbox mode: when True, order creation still writes to the connected DB
+    # but tags the initial status_history entry with `safe_metadata.sandbox=True`
+    # so tests can run end-to-end without polluting production semantics. Never
+    # enable in production. This intentionally does NOT change the DB schema.
+    sandbox_mode: bool = False
+    # Comma-separated list of allowed shipping cities. When empty, city is
+    # ignored server-side (still accepted from the client as a hint). When
+    # non-empty, the OrderCreate.city field is required and validated against
+    # this list. Do NOT invent cities — must mirror the operations-approved list.
+    allowed_cities: str = ""
 
     @model_validator(mode="after")
     def validate_feature_configuration(self) -> "Settings":
@@ -53,6 +71,16 @@ class Settings(BaseSettings):
             )
         return self
 
+    @field_validator("maxmind_minfraud_host")
+    @classmethod
+    def maxmind_host_allowlist(cls, value: str) -> str:
+        allowed = {"minfraud.maxmind.com", "sandbox.maxmind.com"}
+        if value not in allowed:
+            raise ValueError(
+                "MAXMIND_MINFRAUD_HOST must be minfraud.maxmind.com or sandbox.maxmind.com"
+            )
+        return value
+
     @property
     def cors_origin_list(self) -> list[str]:
         return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
@@ -60,6 +88,26 @@ class Settings(BaseSettings):
     @property
     def trusted_host_list(self) -> list[str]:
         return [item.strip() for item in self.trusted_hosts.split(",") if item.strip()]
+
+    @property
+    def trusted_proxy_ip_list(self) -> list[str]:
+        return [item.strip() for item in self.trusted_proxy_ips.split(",") if item.strip()]
+
+    @property
+    def allowed_city_list(self) -> list[str]:
+        return [item.strip() for item in self.allowed_cities.split(",") if item.strip()]
+
+    @property
+    def maxmind_account_id_int(self) -> int | None:
+        raw = (self.maxmind_account_id or "").strip()
+        if not raw.isdigit():
+            return None
+        return int(raw)
+
+    @property
+    def maxmind_license_key_value(self) -> str | None:
+        raw = (self.maxmind_license_key or "").strip()
+        return raw or None
 
 
 @lru_cache
