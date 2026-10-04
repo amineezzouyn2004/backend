@@ -49,7 +49,7 @@ def create(
     except InvalidMoroccanPhone as exc:
         raise DomainProblem(422, "PHONE_INVALID", "رقم الهاتف غير صالح", "يرجى إدخال رقم هاتف مغربي صحيح.") from exc
     except InvalidCity as exc:
-        raise DomainProblem(422, "CITY_INVALID", "المدينة غير صالحة", "يرجى اختيار المدينة.") from exc
+        raise DomainProblem(422, "CITY_INVALID", "المدينة غير صالحة", "يرجى إدخال اسم مدينة صالح.") from exc
     except OfferUnavailableError as exc:
         raise DomainProblem(409, "OFFER_UNAVAILABLE", "العرض غير متاح", "اختاري عرضًا متاحًا ثم أعيدي المحاولة.") from exc
     except ProductOfferUnconfiguredError as exc:

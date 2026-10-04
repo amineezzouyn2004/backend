@@ -47,11 +47,10 @@ class OrderCreate(BaseModel):
 
     full_name: str = Field(min_length=2, max_length=120)
     phone: str = Field(min_length=8, max_length=32)
-    # City is accepted as an optional client-provided hint. It is validated at
-    # the service layer against `Settings.allowed_city_list`. When the server
-    # allow-list is empty, city is currently ignored (no schema migration).
-    # When the allow-list is non-empty, city is required and must match one of
-    # the entries; otherwise a CITY_INVALID DomainProblem is raised.
+    # Optional free-text city. Service layer accepts null/empty or a reasonable
+    # trimmed name. An allow-list is not required; when empty, the value is
+    # stored in status_history.safe_metadata. When populated, a provided city
+    # must match. Do not invent cities.
     city: str | None = Field(default=None, max_length=80)
     items: list[QuoteItemRequest] = Field(min_length=1, max_length=10)
     upsell_intent: bool = False

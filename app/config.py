@@ -53,10 +53,9 @@ class Settings(BaseSettings):
     # so tests can run end-to-end without polluting production semantics. Never
     # enable in production. This intentionally does NOT change the DB schema.
     sandbox_mode: bool = False
-    # Comma-separated list of allowed shipping cities. When empty, city is
-    # ignored server-side (still accepted from the client as a hint). When
-    # non-empty, the OrderCreate.city field is required and validated against
-    # this list. Do NOT invent cities — must mirror the operations-approved list.
+    # Optional extra constraint only. City on OrderCreate stays optional and is
+    # free text when this list is empty (any reasonable trimmed name or null).
+    # Do NOT invent a coverage list. When non-empty, a provided city must match.
     allowed_cities: str = ""
 
     @model_validator(mode="after")

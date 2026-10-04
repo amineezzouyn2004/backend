@@ -34,6 +34,12 @@ def test_catalog_and_multi_quote_contracts() -> None:
     assert catalog.status_code == 200
     assert len(catalog.json()) == 3
     assert catalog.json()[0]["offer_mapping_mode"] == "development_demo"
+    skus = {item["slug"]: item["sku"] for item in catalog.json()}
+    assert skus == {
+        "smart-baby-nasal-aspirator": "HNIN-ASP-001",
+        "smart-baby-sleep-lamp": "HNIN-LMP-001",
+        "natural-calming-baby-massage-oil": "HNIN-OIL-001",
+    }
     quote = client.post("/v1/offers/quote", json={"items": [item]})
     assert quote.status_code == 200
     assert quote.json()["total_minor"] == 69_900
@@ -70,6 +76,7 @@ def test_create_order_and_public_confirmation_exclude_pii() -> None:
     body = created.json()
     assert "full_name" not in body
     assert "phone" not in body
+    assert body["public_reference"].startswith("HNIN-MA-")
     assert created.headers["cache-control"] == "no-store"
     confirmation = client.get(f"/v1/orders/{body['public_reference']}")
     assert confirmation.status_code == 200

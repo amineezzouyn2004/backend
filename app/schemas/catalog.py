@@ -12,6 +12,7 @@ class DevelopmentMedia(BaseModel):
 class ProductPublic(BaseModel):
     id: str
     slug: str
+    sku: str
     name_ar: str
     publish_status: Literal["development_blocked"]
     media: list[DevelopmentMedia]
@@ -52,6 +53,7 @@ class QuoteRequest(BaseModel):
 class QuoteItemPublic(BaseModel):
     product_id: str
     product_slug: str
+    sku: str
     product_name_ar: str
     offer_code: str
     offer_version: int

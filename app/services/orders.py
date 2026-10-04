@@ -1,6 +1,7 @@
 import hashlib
 import json
 import logging
+import re
 import secrets
 import unicodedata
 import uuid
@@ -10,6 +11,8 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings
 from app.integrations.minfraud import build_outbox_payload, is_minfraud_ready
+from app.integrations.sheets.payload import PUBLIC_REFERENCE_PREFIX, build_sheets_payload
+from app.services.catalog import PRODUCTS
 from app.models.order import (
     AttributionRecord, ConsentRecord, IdempotencyRecord, Order, OrderItem,
     OrderStatus, OrderStatusHistory,
@@ -28,29 +31,42 @@ class IdempotencyConflict(ValueError):
 
 
 class InvalidCity(ValueError):
-    """Raised when the client-provided city is missing or not on the allow-list."""
+    """Raised when a provided city string is unreasonable or not on a set allow-list."""
+
+
+_CITY_LETTER_RE = re.compile(r"[A-Za-z\u00C0-\u024F\u0600-\u06FF]")
+_CITY_MAX_LENGTH = 80
 
 
 def normalize_name(value: str) -> str:
     return " ".join(unicodedata.normalize("NFKC", value).split())
 
 
-def resolve_city(payload_city: str | None, allowed: list[str]) -> str | None:
-    """Return the normalized city string when the allow-list is populated.
+def _is_reasonable_city(normalized: str) -> bool:
+    if not normalized or len(normalized) > _CITY_MAX_LENGTH:
+        return False
+    if normalized.isdigit():
+        return False
+    return _CITY_LETTER_RE.search(normalized) is not None
 
-    When `allowed` is empty, city is not enforced server-side; we simply drop
-    the value (returning None) so it never reaches persistent storage. When
-    `allowed` is non-empty, the client must supply a value that matches one of
-    the entries after trimming.
+
+def resolve_city(payload_city: str | None, allowed: list[str]) -> str | None:
+    """Normalize optional free-text city. Do not invent coverage.
+
+    City stays optional. Empty / whitespace becomes None. When a value is
+    present it must be a reasonable trimmed name (Arabic/Latin/French letters;
+    not digits-only). If `allowed` is empty, any reasonable city is stored.
+    If `allowed` is populated, a provided city must match that list; a missing
+    city is still accepted as None.
     """
-    if not allowed:
-        return None
     if payload_city is None:
-        raise InvalidCity("missing")
+        return None
     normalized = payload_city.strip()
     if not normalized:
-        raise InvalidCity("empty")
-    if normalized not in allowed:
+        return None
+    if not _is_reasonable_city(normalized):
+        raise InvalidCity("unreasonable")
+    if allowed and normalized not in allowed:
         raise InvalidCity("unsupported")
     return normalized
 
@@ -65,15 +81,27 @@ def request_fingerprint(payload: OrderCreate, normalized_name: str, phone: str) 
     ).hexdigest()
 
 
+def generate_public_reference() -> str:
+    return f"{PUBLIC_REFERENCE_PREFIX}{secrets.token_urlsafe(18)}"
+
+
+def _public_product_id(item: OrderItem) -> str:
+    product = PRODUCTS.get(item.product_slug or "")
+    if product is not None:
+        return product.id
+    return item.sku_snapshot or item.product_slug or "unconfigured"
+
+
 def to_public(order: Order, event_id: uuid.UUID) -> OrderPublic:
     return OrderPublic(
         public_reference=order.public_reference,
         status=order.status,
         items=[
-            {
-                "product_id": item.sku_snapshot or item.product_slug or "unconfigured",
-                "product_slug": item.product_slug or "unconfigured",
-                "product_name_ar": item.name_snapshot_ar,
+                {
+                    "product_id": _public_product_id(item),
+                    "product_slug": item.product_slug or "unconfigured",
+                    "sku": item.sku_snapshot or "unconfigured",
+                    "product_name_ar": item.name_snapshot_ar,
                 "offer_code": item.offer_code or order.offer_code,
                 "offer_version": item.offer_version or order.offer_version,
                 "offer_quantity": item.offer_quantity,
@@ -118,10 +146,9 @@ def create_order(
 ) -> CreateOrderResult:
     name = normalize_name(payload.full_name)
     phone = normalize_moroccan_mobile(payload.phone)
-    # City is validated but currently never persisted (no dedicated column and
-    # Alembic is disabled locally). When the allow-list is populated, we record
-    # the normalized value in the initial status_history.safe_metadata JSON so
-    # operations can audit it without a schema migration.
+    # Optional city is stored in the initial status_history.safe_metadata JSON
+    # when present (no dedicated column). Empty allow-list still accepts any
+    # reasonable trimmed city; it is not silently dropped.
     resolved_city = resolve_city(payload.city, settings.allowed_city_list)
     fingerprint = request_fingerprint(payload, name, phone)
     repository = OrderRepository(db)
@@ -159,7 +186,7 @@ def create_order(
 
     event_id = payload.client_event_id or uuid.uuid4()
     order = Order(
-        public_reference=secrets.token_urlsafe(24),
+        public_reference=generate_public_reference(),
         status=OrderStatus.PENDING,
         full_name=name,
         phone_e164=phone,
@@ -180,7 +207,7 @@ def create_order(
         order.items.append(
             OrderItem(
                 product_slug=item.product_slug,
-                sku_snapshot=item.product_id,
+                sku_snapshot=item.sku,
                 name_snapshot_ar=item.product_name_ar,
                 offer_code=item.offer_code,
                 offer_version=item.offer_version,
@@ -291,8 +318,17 @@ def create_order(
             "utm_campaign": payload.attribution.utm_campaign if payload.attribution else None,
         }
         if destination == "sheets":
-            payload_data["full_name"] = name
-            payload_data["phone_e164"] = phone
+            payload_data = build_sheets_payload(
+                event_id=str(event_id),
+                public_reference=order.public_reference,
+                created_at=order.created_at,
+                full_name=name,
+                phone_e164=phone,
+                product_names_ar=[item.product_name_ar for item in quote.items],
+                skus=[item.sku for item in quote.items],
+                quantities=[item.offer_quantity for item in quote.items],
+                total_minor=order.total_minor,
+            )
         db.add(
             OutboxEvent(
                 internal_event_id=event_id,
@@ -300,7 +336,7 @@ def create_order(
                 aggregate_id=order.id,
                 event_type="OrderSubmitted",
                 destination=destination,
-                payload_version=2,
+                payload_version=3 if destination == "sheets" else 2,
                 payload=payload_data,
             )
         )

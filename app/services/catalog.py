@@ -17,6 +17,7 @@ INFORMATION_REQUIRED = "TODO — INFORMATION REQUIRED"
 class CanonicalProduct:
     id: str
     slug: str
+    sku: str
     name_ar: str
     related: tuple[str, ...]
     information_required: tuple[str, ...]
@@ -25,6 +26,7 @@ class CanonicalProduct:
         return ProductPublic(
             id=self.id,
             slug=self.slug,
+            sku=self.sku,
             name_ar=self.name_ar,
             publish_status="development_blocked",
             media=[
@@ -44,24 +46,27 @@ PRODUCTS = {
     product.slug: product
     for product in (
         CanonicalProduct(
-            "product_smart_baby_nasal_aspirator",
-            "smart-baby-nasal-aspirator",
-            "شفّاط الأنف الذكي للرضّع",
-            ("smart-baby-sleep-lamp", "natural-calming-baby-massage-oil"),
+            "product_smart_baby_lamp",
+            "smart-baby-lamp",
+            "HANIN-LAMP-01",
+            "مصباح ذكي للأطفال",
+            ("jumon-portable-baby-nasal-aspirator", "label-baby-oil"),
             (f"{INFORMATION_REQUIRED}: facts, safety, usage, media rights",),
         ),
         CanonicalProduct(
-            "product_smart_baby_sleep_lamp",
-            "smart-baby-sleep-lamp",
-            "مصباح النوم الذكي بالصوت والحركة",
-            ("smart-baby-nasal-aspirator", "natural-calming-baby-massage-oil"),
+            "product_jumon_portable_baby_nasal_aspirator",
+            "jumon-portable-baby-nasal-aspirator",
+            "HANIN-JUMON-01",
+            "شفّاط أنف محمول للرضّع",
+            ("smart-baby-lamp", "label-baby-oil"),
             (f"{INFORMATION_REQUIRED}: facts, safety, usage, media rights",),
         ),
         CanonicalProduct(
-            "product_natural_calming_baby_massage_oil",
-            "natural-calming-baby-massage-oil",
-            "زيت مساج طبيعي مهدّئ للأطفال",
-            ("smart-baby-sleep-lamp",),
+            "product_label_baby_oil",
+            "label-baby-oil",
+            "HANIN-OIL-01",
+            "زيت أطفال",
+            ("smart-baby-lamp",),
             (f"{INFORMATION_REQUIRED}: ingredients, safety, usage, media rights",),
         ),
     )
@@ -172,6 +177,7 @@ def quote_cart(
             QuoteItemPublic(
                 product_id=product.id,
                 product_slug=product.slug,
+                sku=product.sku,
                 product_name_ar=product.name_ar,
                 offer_code=offer.code,
                 offer_version=offer.version,
@@ -194,6 +200,7 @@ def quote_cart(
             QuoteItemPublic(
                 product_id=product.id,
                 product_slug=product.slug,
+                sku=product.sku,
                 product_name_ar=product.name_ar,
                 offer_code=UPSELL_CODE,
                 offer_version=1,

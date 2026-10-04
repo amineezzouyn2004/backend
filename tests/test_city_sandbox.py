@@ -1,11 +1,9 @@
 """Regression tests for optional city validation and sandbox metadata.
 
-These cover STEP 1 (F) of the production-readiness audit:
-- When ALLOWED_CITIES is empty the city field is accepted but silently dropped
-  server-side (no schema change, no invented coverage).
-- When ALLOWED_CITIES is populated, city becomes required and validated.
-- When SANDBOX_MODE=true, the initial status_history entry is tagged so QA
-  runs against a shared DB can be filtered out without touching the schema.
+City is optional free text. When ALLOWED_CITIES is empty, any reasonable
+trimmed city (or null) is accepted and stored in safe_metadata when present.
+An allow-list is not required and must not be invented. When the list is
+populated, a provided city must match; missing city remains allowed.
 """
 
 from datetime import datetime, timezone
@@ -67,25 +65,32 @@ def _payload(city: str | None = None) -> OrderCreate:
     )
 
 
-def test_resolve_city_returns_none_when_allow_list_is_empty() -> None:
+def test_resolve_city_accepts_optional_free_text_when_allow_list_is_empty() -> None:
     assert resolve_city(None, []) is None
-    assert resolve_city("Casablanca", []) is None
     assert resolve_city("  ", []) is None
+    assert resolve_city("Casablanca", []) == "Casablanca"
+    assert resolve_city("  الدار البيضاء  ", []) == "الدار البيضاء"
+    assert resolve_city("Fès", []) == "Fès"
 
 
-def test_resolve_city_requires_and_validates_when_list_present() -> None:
+def test_resolve_city_rejects_unreasonable_values() -> None:
+    with pytest.raises(InvalidCity):
+        resolve_city("12345", [])
+    with pytest.raises(InvalidCity):
+        resolve_city("---", [])
+
+
+def test_resolve_city_optional_even_when_list_present() -> None:
     allowed = ["Casablanca", "Rabat"]
+    assert resolve_city(None, allowed) is None
+    assert resolve_city("", allowed) is None
     assert resolve_city("Casablanca", allowed) == "Casablanca"
     assert resolve_city("  Rabat  ", allowed) == "Rabat"
-    with pytest.raises(InvalidCity):
-        resolve_city(None, allowed)
-    with pytest.raises(InvalidCity):
-        resolve_city("", allowed)
     with pytest.raises(InvalidCity):
         resolve_city("Tanger", allowed)
 
 
-def test_create_order_ignores_city_when_no_allow_list(db: Session) -> None:
+def test_create_order_stores_city_when_no_allow_list(db: Session) -> None:
     result = create_order(db, _payload(city="Casablanca"), "city-key-1", _settings())
     order = db.scalar(
         select(Order).where(Order.public_reference == result.response.public_reference)
@@ -95,16 +100,27 @@ def test_create_order_ignores_city_when_no_allow_list(db: Session) -> None:
         select(OrderStatusHistory).where(OrderStatusHistory.order_id == order.id)
     ).all()
     assert len(history) == 1
-    # City is silently dropped; no `city` key in safe_metadata.
-    assert "city" not in (history[0].safe_metadata or {})
+    assert (history[0].safe_metadata or {}).get("city") == "Casablanca"
+
+
+def test_create_order_accepts_missing_city_when_allow_list_present(db: Session) -> None:
+    cfg = _settings(allowed_cities="Casablanca,Rabat")
+    result = create_order(db, _payload(city=None), "city-key-2", cfg)
+    order = db.scalar(
+        select(Order).where(Order.public_reference == result.response.public_reference)
+    )
+    assert order is not None
+    entry = db.scalars(
+        select(OrderStatusHistory).where(OrderStatusHistory.order_id == order.id)
+    ).first()
+    assert entry is not None
+    assert "city" not in (entry.safe_metadata or {})
 
 
 def test_create_order_rejects_unsupported_city_when_allow_list_present(
     db: Session,
 ) -> None:
     cfg = _settings(allowed_cities="Casablanca,Rabat")
-    with pytest.raises(InvalidCity):
-        create_order(db, _payload(city=None), "city-key-2", cfg)
     with pytest.raises(InvalidCity):
         create_order(db, _payload(city="Tanger"), "city-key-3", cfg)
 

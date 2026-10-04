@@ -108,7 +108,22 @@ def test_tracking_and_sheets_outbox_share_event_id_without_ad_delivery(db: Sessi
     assert outbox is not None
     assert result.response.event_id == tracking_id == outbox.internal_event_id
     assert outbox.destination == "sheets"
-    assert outbox.payload["full_name"] == "مريم العلوي"
+    assert result.response.public_reference.startswith("HNIN-MA-")
+    assert outbox.payload["schema_version"] == 3
+    assert outbox.payload["event_id"] == str(result.response.event_id)
+    assert outbox.payload["order id"] == result.response.public_reference
+    assert outbox.payload["name"] == "مريم العلوي"
+    assert outbox.payload["phone"] == "0612345678"
+    assert outbox.payload["country"] == "Morocco"
+    assert outbox.payload["product"] == (
+        "شفّاط الأنف الذكي للرضّع/مصباح النوم الذكي بالصوت والحركة"
+    )
+    assert outbox.payload["sku"] == "HNIN-ASP-001/HNIN-LMP-001"
+    assert outbox.payload["quantity"] == "3/1"
+    assert outbox.payload["total price"] == "1348.00"
+    assert outbox.payload["currency"] == "MAD"
+    assert outbox.payload["status"] == ""
+    assert "order_status" not in outbox.payload
 
 
 def test_database_constraints_and_webhook_dedup(db: Session) -> None:

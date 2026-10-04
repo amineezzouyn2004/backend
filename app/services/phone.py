@@ -19,3 +19,12 @@ def normalize_moroccan_mobile(value: str) -> str:
     ):
         raise InvalidMoroccanPhone
     return phonenumbers.format_number(parsed, PhoneNumberFormat.E164)
+
+
+def format_moroccan_local_sheet(phone_e164: str) -> str:
+    """Sheet-only national form: 0 + 9 digits. Storage stays E.164."""
+    if phone_e164.startswith("+212"):
+        return "0" + phone_e164[4:]
+    parsed = phonenumbers.parse(phone_e164, "MA")
+    national = phonenumbers.format_number(parsed, PhoneNumberFormat.NATIONAL)
+    return "".join(char for char in national if char.isdigit())
