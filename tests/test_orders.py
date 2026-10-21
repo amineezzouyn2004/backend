@@ -43,11 +43,11 @@ def payload(name: str = "مريم العلوي") -> OrderCreate:
         phone="0612345678",
         items=[
             {
-                "product_slug": "smart-baby-nasal-aspirator",
+                "product_slug": "smart-baby-lamp",
                 "offer_code": "OFFER_3",
             },
             {
-                "product_slug": "smart-baby-sleep-lamp",
+                "product_slug": "jumon-portable-baby-nasal-aspirator",
                 "offer_code": "OFFER_1",
             },
         ],
@@ -116,9 +116,9 @@ def test_tracking_and_sheets_outbox_share_event_id_without_ad_delivery(db: Sessi
     assert outbox.payload["phone"] == "0612345678"
     assert outbox.payload["country"] == "Morocco"
     assert outbox.payload["product"] == (
-        "شفّاط الأنف الذكي للرضّع/مصباح النوم الذكي بالصوت والحركة"
+        "مصباح ذكي للأطفال/شفّاط أنف محمول للرضّع"
     )
-    assert outbox.payload["sku"] == "HNIN-ASP-001/HNIN-LMP-001"
+    assert outbox.payload["sku"] == "HANIN-LAMP-01/HANIN-JUMON-01"
     assert outbox.payload["quantity"] == "3/1"
     assert outbox.payload["total price"] == "1348.00"
     assert outbox.payload["currency"] == "MAD"

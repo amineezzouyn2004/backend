@@ -51,7 +51,7 @@ def _payload(city: str | None = None) -> OrderCreate:
         city=city,
         items=[
             {
-                "product_slug": "smart-baby-nasal-aspirator",
+                "product_slug": "smart-baby-lamp",
                 "offer_code": "OFFER_1",
             }
         ],

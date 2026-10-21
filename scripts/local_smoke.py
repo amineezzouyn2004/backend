@@ -18,7 +18,7 @@ ORIGIN = FRONTEND_URL
 TIMEOUT = 10.0
 
 ITEM = {
-    "product_slug": "smart-baby-nasal-aspirator",
+    "product_slug": "smart-baby-lamp",
     "offer_code": "OFFER_2",
 }
 
@@ -174,7 +174,7 @@ def main() -> None:
         frontend_paths = [
             "/",
             "/products",
-            "/products/smart-baby-nasal-aspirator",
+            "/products/smart-baby-lamp",
             "/checkout",
             "/privacy",
             "/robots.txt",

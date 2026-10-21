@@ -24,8 +24,8 @@ def test_canonical_offer_math_and_rounding() -> None:
 def test_multi_item_quote_uses_integer_server_totals() -> None:
     quote = quote_cart(
         [
-            item("smart-baby-nasal-aspirator", "OFFER_2"),
-            item("smart-baby-sleep-lamp", "OFFER_1"),
+            item("smart-baby-lamp", "OFFER_2"),
+            item("jumon-portable-baby-nasal-aspirator", "OFFER_1"),
         ],
         demo_enabled=True,
         upsell_intent=False,
@@ -43,7 +43,7 @@ def test_multi_item_quote_uses_integer_server_totals() -> None:
 def test_mapping_gate_and_duplicates_are_rejected() -> None:
     with pytest.raises(ProductOfferUnconfiguredError):
         quote_cart(
-            [item("smart-baby-nasal-aspirator")],
+            [item("smart-baby-lamp")],
             demo_enabled=False,
             upsell_intent=False,
             upsell_enabled=False,
@@ -51,7 +51,7 @@ def test_mapping_gate_and_duplicates_are_rejected() -> None:
         )
     with pytest.raises(DuplicateProductError):
         quote_cart(
-            [item("smart-baby-nasal-aspirator"), item("smart-baby-nasal-aspirator")],
+            [item("smart-baby-lamp"), item("smart-baby-lamp")],
             demo_enabled=True,
             upsell_intent=False,
             upsell_enabled=False,
@@ -62,18 +62,18 @@ def test_mapping_gate_and_duplicates_are_rejected() -> None:
 def test_upsell_is_199_and_requires_full_configuration() -> None:
     with pytest.raises(UpsellUnavailableError):
         quote_cart(
-            [item("smart-baby-nasal-aspirator")],
+            [item("smart-baby-lamp")],
             demo_enabled=True,
             upsell_intent=True,
             upsell_enabled=False,
             upsell_product_slug=None,
         )
     quote = quote_cart(
-        [item("smart-baby-nasal-aspirator")],
+        [item("smart-baby-lamp")],
         demo_enabled=True,
         upsell_intent=True,
         upsell_enabled=True,
-        upsell_product_slug="smart-baby-sleep-lamp",
+        upsell_product_slug="jumon-portable-baby-nasal-aspirator",
     )
     assert quote.items[-1].role == "upsell"
     assert quote.items[-1].line_total_minor == 19_900

@@ -24,7 +24,7 @@ def override_db():
 app.dependency_overrides[get_db] = override_db
 client = TestClient(app)
 item = {
-    "product_slug": "smart-baby-nasal-aspirator",
+    "product_slug": "smart-baby-lamp",
     "offer_code": "OFFER_2",
 }
 
@@ -36,9 +36,9 @@ def test_catalog_and_multi_quote_contracts() -> None:
     assert catalog.json()[0]["offer_mapping_mode"] == "development_demo"
     skus = {item["slug"]: item["sku"] for item in catalog.json()}
     assert skus == {
-        "smart-baby-nasal-aspirator": "HNIN-ASP-001",
-        "smart-baby-sleep-lamp": "HNIN-LMP-001",
-        "natural-calming-baby-massage-oil": "HNIN-OIL-001",
+        "smart-baby-lamp": "HANIN-LAMP-01",
+        "jumon-portable-baby-nasal-aspirator": "HANIN-JUMON-01",
+        "label-baby-oil": "HANIN-OIL-01",
     }
     quote = client.post("/v1/offers/quote", json={"items": [item]})
     assert quote.status_code == 200

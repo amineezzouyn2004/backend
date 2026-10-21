@@ -52,11 +52,11 @@ def payload(name: str = "مريم العلوي") -> OrderCreate:
         phone="0612345678",
         items=[
             {
-                "product_slug": "smart-baby-nasal-aspirator",
+                "product_slug": "smart-baby-lamp",
                 "offer_code": "OFFER_3",
             },
             {
-                "product_slug": "smart-baby-sleep-lamp",
+                "product_slug": "jumon-portable-baby-nasal-aspirator",
                 "offer_code": "OFFER_1",
             },
         ],
@@ -168,7 +168,7 @@ def test_payload_uses_collected_fields_only() -> None:
             "user_agent": "HaninTest/1.0",
             "accept_language": "ar",
             "items": [
-                {"item_id": "smart-baby-nasal-aspirator", "quantity": 1, "unit_minor": 39_900}
+                {"item_id": "smart-baby-lamp", "quantity": 1, "unit_minor": 39_900}
             ],
         }
     )

@@ -52,8 +52,8 @@ def test_sheets_payload_matches_csv_headers_and_blank_status() -> None:
         created_at=created,
         full_name="مريم العلوي",
         phone_e164="+212687984567",
-        product_names_ar=["شفّاط الأنف الذكي للرضّع", "مصباح النوم الذكي بالصوت والحركة"],
-        skus=["HNIN-ASP-001", "HNIN-LMP-001"],
+        product_names_ar=["مصباح ذكي للأطفال", "شفّاط أنف محمول للرضّع"],
+        skus=["HANIN-LAMP-01", "HANIN-JUMON-01"],
         quantities=[2, 2],
         total_minor=139_800,
     )
@@ -66,9 +66,9 @@ def test_sheets_payload_matches_csv_headers_and_blank_status() -> None:
     assert payload["name"] == "مريم العلوي"
     assert payload["phone"] == "0687984567"
     assert payload["product"] == (
-        "شفّاط الأنف الذكي للرضّع/مصباح النوم الذكي بالصوت والحركة"
+        "مصباح ذكي للأطفال/شفّاط أنف محمول للرضّع"
     )
-    assert payload["sku"] == "HNIN-ASP-001/HNIN-LMP-001"
+    assert payload["sku"] == "HANIN-LAMP-01/HANIN-JUMON-01"
     assert payload["quantity"] == "2/2"
     assert payload["total price"] == "1398.00"
     assert payload["currency"] == "MAD"
