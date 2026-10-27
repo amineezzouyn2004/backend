@@ -40,10 +40,22 @@ def test_multi_item_quote_uses_integer_server_totals() -> None:
     assert [line.role for line in quote.items] == ["primary", "cross_sell"]
 
 
-def test_mapping_gate_and_duplicates_are_rejected() -> None:
+def test_production_mapping_quotes_without_demo_flag() -> None:
+    quote = quote_cart(
+        [item("smart-baby-lamp"), item("label-baby-oil", "OFFER_3")],
+        demo_enabled=False,
+        upsell_intent=False,
+        upsell_enabled=False,
+        upsell_product_slug=None,
+    )
+    assert quote.total_minor == 39_900 + 94_900
+    assert [line.offer_code for line in quote.items] == ["OFFER_1", "OFFER_3"]
+
+
+def test_unknown_product_and_duplicates_are_rejected() -> None:
     with pytest.raises(ProductOfferUnconfiguredError):
         quote_cart(
-            [item("smart-baby-lamp")],
+            [item("unknown-product")],
             demo_enabled=False,
             upsell_intent=False,
             upsell_enabled=False,
@@ -52,7 +64,7 @@ def test_mapping_gate_and_duplicates_are_rejected() -> None:
     with pytest.raises(DuplicateProductError):
         quote_cart(
             [item("smart-baby-lamp"), item("smart-baby-lamp")],
-            demo_enabled=True,
+            demo_enabled=False,
             upsell_intent=False,
             upsell_enabled=False,
             upsell_product_slug=None,

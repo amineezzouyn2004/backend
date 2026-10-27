@@ -18,7 +18,9 @@ class ProductPublic(BaseModel):
     media: list[DevelopmentMedia]
     information_required: list[str]
     eligible_offer_codes: list[str]
-    offer_mapping_mode: Literal["unconfigured", "development_demo"]
+    offer_mapping_mode: Literal[
+        "unconfigured", "development_demo", "approved_product_linkage"
+    ]
     related_product_slugs: list[str]
 
 
@@ -32,7 +34,11 @@ class OfferPublic(BaseModel):
     saving_minor: int
     per_unit_minor: int
     per_unit_is_approximate: bool
-    applicability_status: Literal["blocked_product_linkage", "development_demo"]
+    applicability_status: Literal[
+        "blocked_product_linkage",
+        "development_demo",
+        "approved_product_linkage",
+    ]
 
 
 class QuoteItemRequest(BaseModel):

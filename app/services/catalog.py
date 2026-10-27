@@ -36,8 +36,10 @@ class CanonicalProduct:
                 )
             ],
             information_required=list(self.information_required),
-            eligible_offer_codes=list(OFFERS) if demo_enabled else [],
-            offer_mapping_mode="development_demo" if demo_enabled else "unconfigured",
+            eligible_offer_codes=list(mapped_offer_codes(demo_enabled)),
+            offer_mapping_mode=(
+                "development_demo" if demo_enabled else "approved_product_linkage"
+            ),
             related_product_slugs=list(self.related),
         )
 
@@ -104,7 +106,7 @@ class CanonicalOffer:
             per_unit_minor=self.per_unit_minor,
             per_unit_is_approximate=self.total_minor % self.quantity != 0,
             applicability_status=(
-                "development_demo" if demo_enabled else "blocked_product_linkage"
+                "development_demo" if demo_enabled else "approved_product_linkage"
             ),
         )
 
@@ -117,6 +119,18 @@ OFFERS = {
         CanonicalOffer("OFFER_3", 1, 3, 94_900),
     )
 }
+# Owner-approved 2026-10-27: every catalog SKU may use OFFER_1/2/3 in production.
+# Quotes must succeed without DEMO_OFFER_MAPPING_ENABLED. Keep that flag false
+# in EasyPanel; it only labels responses as development_demo.
+PRODUCTION_OFFER_CODES = ("OFFER_1", "OFFER_2", "OFFER_3")
+
+
+def mapped_offer_codes(demo_enabled: bool) -> tuple[str, ...]:
+    if demo_enabled:
+        return tuple(OFFERS)
+    return PRODUCTION_OFFER_CODES
+
+
 UPSELL_CODE = "UPSELL_199"
 UPSELL_TOTAL_MINOR = 19_900
 
@@ -164,12 +178,12 @@ def quote_cart(
         product = PRODUCTS.get(product_slug)
         if product is None:
             raise ProductOfferUnconfiguredError(product_slug)
-        if not demo_enabled:
-            raise ProductOfferUnconfiguredError(product_slug)
         offer = get_offer(
             getattr(item, "offer_code"),
             getattr(item, "offer_version"),
         )
+        if offer.code not in mapped_offer_codes(demo_enabled):
+            raise ProductOfferUnconfiguredError(product_slug)
         role: Literal["primary", "cross_sell", "upsell"] = (
             "primary" if index == 0 else "cross_sell"
         )

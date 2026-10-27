@@ -30,10 +30,12 @@ def db() -> Session:
 
 
 def settings(**overrides: object) -> Settings:
-    return Settings(
-        database_url="sqlite+pysqlite:///:memory:",
-        demo_offer_mapping_enabled=True,
-        **overrides,
+    return Settings.model_validate(
+        {
+            "database_url": "sqlite+pysqlite:///:memory:",
+            "demo_offer_mapping_enabled": True,
+            **overrides,
+        }
     )
 
 
@@ -65,6 +67,19 @@ def payload(name: str = "مريم العلوي") -> OrderCreate:
             "captured_at": datetime.now(timezone.utc),
         },
     )
+
+
+def test_order_quotes_with_production_mapping_without_demo_flag(db: Session) -> None:
+    result = create_order(
+        db,
+        payload(),
+        "prod-map-key-001",
+        settings(demo_offer_mapping_enabled=False),
+        user_agent="test-agent",
+    )
+    assert result.replayed is False
+    assert result.response.total_minor == 134_800
+    assert [item.offer_code for item in result.response.items] == ["OFFER_3", "OFFER_1"]
 
 
 def test_order_uses_server_price_and_replays_idempotently(db: Session) -> None:
