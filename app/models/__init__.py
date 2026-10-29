@@ -1,3 +1,5 @@
+from app.models.admin import AdminSession
+from app.models.analytics import AnalyticsEvent
 from app.models.minfraud import MinFraudAssessment
 from app.models.order import (
     AttributionRecord, ConsentRecord, IdempotencyRecord, Order, OrderItem,
@@ -6,6 +8,7 @@ from app.models.order import (
 from app.models.tracking import OutboxEvent, TrackingEvent, WebhookReceipt
 
 __all__ = [
+    "AdminSession", "AnalyticsEvent",
     "AttributionRecord", "ConsentRecord", "IdempotencyRecord",
     "MinFraudAssessment", "Order", "OrderItem", "OrderStatus",
     "OrderStatusHistory", "OutboxEvent", "TrackingEvent", "WebhookReceipt",

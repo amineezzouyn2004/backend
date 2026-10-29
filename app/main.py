@@ -10,7 +10,7 @@ from app.errors import (
     validation_problem_handler,
 )
 from app.middleware import RequestContextMiddleware, RequestGuardMiddleware
-from app.routes import catalog, health, offers, orders
+from app.routes import admin, catalog, events, health, offers, orders
 
 
 settings = get_settings()
@@ -33,7 +33,7 @@ app.add_exception_handler(RequestValidationError, validation_problem_handler)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
-    allow_credentials=False,
+    allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
@@ -44,3 +44,5 @@ app.include_router(health.router)
 app.include_router(catalog.router)
 app.include_router(offers.router)
 app.include_router(orders.router)
+app.include_router(admin.router)
+app.include_router(events.router)

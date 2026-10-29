@@ -48,6 +48,22 @@ class Settings(BaseSettings):
     maxmind_minfraud_timeout_seconds: float = Field(default=8.0, gt=0, le=30)
     maxmind_minfraud_host: str = "minfraud.maxmind.com"
     trusted_proxy_ips: str = ""
+    # Admin dashboard. Unset username/password disables login (no open admin).
+    admin_username: str | None = None
+    admin_password: str | None = None
+    admin_password_hash: str | None = None
+    admin_session_secret: str | None = None
+    admin_session_hours: int = Field(default=12, ge=1, le=72)
+    admin_login_rate_limit_per_minute: int = Field(default=5, ge=1, le=60)
+    ip_hash_secret: str | None = None
+    event_rate_limit_per_minute: int = Field(default=60, ge=1, le=600)
+    # GeoIP for admin metrics only. Separate from minFraud scoring.
+    # Keep MAXMIND_MINFRAUD_ENABLED=false so pageviews do not burn minFraud credits.
+    maxmind_geoip_enabled: bool = False
+    maxmind_geoip_service: Literal["country", "insights"] = "country"
+    maxmind_geoip_timeout_seconds: float = Field(default=3.0, gt=0, le=15)
+    maxmind_geolite_country_db: str | None = None
+    maxmind_anonymous_ip_db: str | None = None
     # Sandbox mode: when True, order creation still writes to the connected DB
     # but tags the initial status_history entry with `safe_metadata.sandbox=True`
     # so tests can run end-to-end without polluting production semantics. Never
@@ -107,6 +123,46 @@ class Settings(BaseSettings):
     def maxmind_license_key_value(self) -> str | None:
         raw = (self.maxmind_license_key or "").strip()
         return raw or None
+
+    @property
+    def admin_username_value(self) -> str | None:
+        raw = (self.admin_username or "").strip()
+        return raw or None
+
+    @property
+    def admin_password_value(self) -> str | None:
+        raw = (self.admin_password or "").strip()
+        return raw or None
+
+    @property
+    def admin_password_hash_value(self) -> str | None:
+        raw = (self.admin_password_hash or "").strip().lower()
+        return raw or None
+
+    @property
+    def admin_session_secret_value(self) -> str | None:
+        raw = (self.admin_session_secret or "").strip()
+        return raw or None
+
+    @property
+    def ip_hash_secret_value(self) -> str | None:
+        raw = (self.ip_hash_secret or "").strip()
+        return raw or self.admin_session_secret_value
+
+    @property
+    def geolite_country_db_path(self) -> str | None:
+        raw = (self.maxmind_geolite_country_db or "").strip()
+        return raw or None
+
+    @property
+    def anonymous_ip_db_path(self) -> str | None:
+        raw = (self.maxmind_anonymous_ip_db or "").strip()
+        return raw or None
+
+    def admin_is_configured(self) -> bool:
+        if not self.admin_username_value:
+            return False
+        return bool(self.admin_password_value or self.admin_password_hash_value)
 
 
 @lru_cache

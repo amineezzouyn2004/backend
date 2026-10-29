@@ -58,9 +58,14 @@ class RequestGuardMiddleware(BaseHTTPMiddleware):
                 media_type="application/problem+json",
             )
         origin = request.headers.get("origin")
+        origin_protected = {
+            "/v1/orders",
+            "/v1/admin/login",
+            "/v1/events/view",
+        }
         if (
             request.method == "POST"
-            and request.url.path == "/v1/orders"
+            and request.url.path in origin_protected
             and origin
             and origin not in self.settings.cors_origin_list
         ):
@@ -76,29 +81,52 @@ class RequestGuardMiddleware(BaseHTTPMiddleware):
                 status_code=403,
                 media_type="application/problem+json",
             )
+        if request.method == "POST" and request.url.path == "/v1/admin/login":
+            limited = self._hit_limit(
+                f"admin-login:{request.client.host if request.client else 'unknown'}",
+                self.settings.admin_login_rate_limit_per_minute,
+            )
+            if limited:
+                return self._rate_limited(request)
+        if request.method == "POST" and request.url.path == "/v1/events/view":
+            limited = self._hit_limit(
+                f"events:{request.client.host if request.client else 'unknown'}",
+                self.settings.event_rate_limit_per_minute,
+            )
+            if limited:
+                # Do not surface errors to the storefront beacon.
+                return Response(status_code=204)
         if (
             self.settings.rate_limit_enabled
             and request.method == "POST"
             and request.url.path == "/v1/orders"
         ):
-            now = time.monotonic()
             client = request.client.host if request.client else "unknown"
-            bucket = self._requests[client]
-            while bucket and bucket[0] <= now - 60:
-                bucket.popleft()
-            if len(bucket) >= self.settings.order_rate_limit_per_minute:
-                return JSONResponse(
-                    {
-                        "type": "https://api.hanin.cc/problems/rate-limited",
-                        "title": "محاولات كثيرة",
-                        "status": 429,
-                        "code": "RATE_LIMITED",
-                        "detail": "انتظري قليلًا ثم حاولي مجددًا.",
-                        "correlation_id": getattr(request.state, "correlation_id", None),
-                    },
-                    status_code=429,
-                    headers={"Retry-After": "60"},
-                    media_type="application/problem+json",
-                )
-            bucket.append(now)
+            if self._hit_limit(f"orders:{client}", self.settings.order_rate_limit_per_minute):
+                return self._rate_limited(request)
         return await call_next(request)
+
+    def _hit_limit(self, key: str, limit: int) -> bool:
+        now = time.monotonic()
+        bucket = self._requests[key]
+        while bucket and bucket[0] <= now - 60:
+            bucket.popleft()
+        if len(bucket) >= limit:
+            return True
+        bucket.append(now)
+        return False
+
+    def _rate_limited(self, request: Request) -> JSONResponse:
+        return JSONResponse(
+            {
+                "type": "https://api.hanin.cc/problems/rate-limited",
+                "title": "محاولات كثيرة",
+                "status": 429,
+                "code": "RATE_LIMITED",
+                "detail": "انتظري قليلًا ثم حاولي مجددًا.",
+                "correlation_id": getattr(request.state, "correlation_id", None),
+            },
+            status_code=429,
+            headers={"Retry-After": "60"},
+            media_type="application/problem+json",
+        )
