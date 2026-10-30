@@ -30,6 +30,10 @@ app = FastAPI(
 )
 app.add_exception_handler(DomainProblem, domain_problem_handler)
 app.add_exception_handler(RequestValidationError, validation_problem_handler)
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
+app.add_middleware(RequestGuardMiddleware, settings=settings)
+app.add_middleware(RequestContextMiddleware)
+# Last added = outermost so 401/403/503 still carry ACAO + Allow-Credentials.
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origin_list,
@@ -37,9 +41,6 @@ app.add_middleware(
     allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["Content-Type", "Idempotency-Key", "X-Request-ID"],
 )
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=settings.trusted_host_list)
-app.add_middleware(RequestGuardMiddleware, settings=settings)
-app.add_middleware(RequestContextMiddleware)
 app.include_router(health.router)
 app.include_router(catalog.router)
 app.include_router(offers.router)

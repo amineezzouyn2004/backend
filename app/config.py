@@ -126,17 +126,17 @@ class Settings(BaseSettings):
 
     @property
     def admin_username_value(self) -> str | None:
-        raw = (self.admin_username or "").strip()
+        raw = (self.admin_username or "").replace("\ufeff", "").strip()
         return raw or None
 
     @property
     def admin_password_value(self) -> str | None:
-        raw = (self.admin_password or "").strip()
+        raw = (self.admin_password or "").replace("\ufeff", "").strip()
         return raw or None
 
     @property
     def admin_password_hash_value(self) -> str | None:
-        raw = (self.admin_password_hash or "").strip().lower()
+        raw = (self.admin_password_hash or "").replace("\ufeff", "").strip().lower()
         return raw or None
 
     @property

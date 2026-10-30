@@ -112,6 +112,91 @@ def test_login_success_and_me(client: TestClient, admin_env: None) -> None:
     assert denied.status_code == 401
 
 
+def test_login_trims_and_accepts_utf8(client: TestClient, monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setenv("ADMIN_USERNAME", "hanin-ops")
+    monkeypatch.setenv("ADMIN_PASSWORD", "سر-حنين")
+    monkeypatch.setenv("ADMIN_SESSION_SECRET", "a" * 48)
+    get_settings.cache_clear()
+    response = client.post(
+        "/v1/admin/login",
+        json={"username": "  hanin-ops  ", "password": "  سر-حنين  "},
+    )
+    assert response.status_code == 200
+    assert "hanin_admin" in response.cookies
+    get_settings.cache_clear()
+
+
+def test_login_bad_hash_is_401_not_500(
+    client: TestClient, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ADMIN_USERNAME", "hanin-ops")
+    monkeypatch.setenv("ADMIN_PASSWORD_HASH", "not-a-sha256-hex-digest")
+    get_settings.cache_clear()
+    response = client.post(
+        "/v1/admin/login",
+        json={"username": "hanin-ops", "password": "whatever"},
+    )
+    assert response.status_code == 401
+    assert response.json()["code"] == "ADMIN_UNAUTHORIZED"
+    get_settings.cache_clear()
+
+
+def test_login_cookie_flags_development(client: TestClient, admin_env: None) -> None:
+    response = client.post(
+        "/v1/admin/login",
+        json={"username": "hanin-ops", "password": "test-admin-password"},
+    )
+    assert response.status_code == 200
+    header = response.headers.get("set-cookie", "")
+    assert "hanin_admin=" in header.lower()
+    assert "httponly" in header.lower()
+    assert "path=/v1/admin" in header.lower()
+    assert "samesite=lax" in header.lower()
+    assert "samesite=none" not in header.lower()
+
+
+def test_login_cookie_flags_production(
+    client: TestClient, admin_env: None, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setenv("ENVIRONMENT", "production")
+    get_settings.cache_clear()
+    response = client.post(
+        "/v1/admin/login",
+        json={"username": "hanin-ops", "password": "test-admin-password"},
+    )
+    assert response.status_code == 200
+    header = response.headers.get("set-cookie", "")
+    assert "hanin_admin=" in header.lower()
+    assert "httponly" in header.lower()
+    assert "secure" in header.lower()
+    assert "samesite=none" in header.lower()
+    assert "path=/v1/admin" in header.lower()
+    assert "domain=" not in header.lower()
+    get_settings.cache_clear()
+
+
+def test_login_cors_credentials(client: TestClient, admin_env: None) -> None:
+    preflight = client.options(
+        "/v1/admin/login",
+        headers={
+            "Origin": "http://testserver",
+            "Access-Control-Request-Method": "POST",
+            "Access-Control-Request-Headers": "content-type",
+        },
+    )
+    assert preflight.status_code == 200
+    assert preflight.headers.get("access-control-allow-origin") == "http://testserver"
+    assert preflight.headers.get("access-control-allow-credentials") == "true"
+    login = client.post(
+        "/v1/admin/login",
+        json={"username": "hanin-ops", "password": "test-admin-password"},
+        headers={"Origin": "http://testserver"},
+    )
+    assert login.status_code == 200
+    assert login.headers.get("access-control-allow-origin") == "http://testserver"
+    assert login.headers.get("access-control-allow-credentials") == "true"
+
+
 def test_metrics_require_session(client: TestClient, admin_env: None) -> None:
     response = client.get("/v1/admin/metrics")
     assert response.status_code == 401

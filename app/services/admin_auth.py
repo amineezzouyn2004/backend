@@ -5,6 +5,7 @@ import hmac
 import logging
 import secrets
 from datetime import datetime, timedelta, timezone
+from typing import Literal
 
 from fastapi import Request, Response
 from sqlalchemy import select
@@ -40,6 +41,10 @@ def hash_visitor(settings: Settings, ip: str, user_agent: str) -> str:
     return hmac_hex(ip_hash_secret(settings), f"{ip}\n{user_agent}")
 
 
+def _clean_secret(value: str) -> str:
+    return value.replace("\ufeff", "").strip()
+
+
 def _safe_equal(left: str, right: str) -> bool:
     left_b = left.encode("utf-8")
     right_b = right.encode("utf-8")
@@ -52,16 +57,20 @@ def verify_credentials(username: str, password: str, settings: Settings) -> bool
     expected_user = settings.admin_username_value
     if expected_user is None:
         return False
-    if not _safe_equal(username.strip(), expected_user):
+    got_user = _clean_secret(username)
+    got_password = _clean_secret(password)
+    if not got_user or not got_password:
+        return False
+    if not _safe_equal(got_user, expected_user):
         return False
     password_hash = settings.admin_password_hash_value
     if password_hash:
-        digest = _sha256_hex(password)
-        return hmac.compare_digest(digest, password_hash)
+        digest = _sha256_hex(got_password)
+        return _safe_equal(digest, password_hash)
     expected_password = settings.admin_password_value
     if not expected_password:
         return False
-    return _safe_equal(password, expected_password)
+    return _safe_equal(got_password, expected_password)
 
 
 def raise_if_admin_disabled(settings: Settings | None = None) -> None:
@@ -120,20 +129,42 @@ def load_session(db: Session, token: str | None) -> AdminSession | None:
     return session
 
 
+def cookie_flags(settings: Settings) -> tuple[bool, Literal["lax", "none"]]:
+    """Host-only cookie on the API host (api.hanin.cc).
+
+    The admin UI on https://hanin.cc is a different origin, so credentialed
+    fetch only attaches this cookie when SameSite=None; Secure. Do not set
+    Domain=.hanin.cc — JS on hanin.cc must never read the token.
+    Path=/v1/admin covers login, me, metrics, orders, and logout.
+    """
+    if settings.environment.strip().lower() == "production":
+        return True, "none"
+    return False, "lax"
+
+
 def set_session_cookie(response: Response, token: str, settings: Settings) -> None:
+    secure, samesite = cookie_flags(settings)
     response.set_cookie(
         key=COOKIE_NAME,
         value=token,
         httponly=True,
-        secure=settings.environment == "production",
-        samesite="lax",
+        secure=secure,
+        samesite=samesite,
         path=COOKIE_PATH,
         max_age=settings.admin_session_hours * 3600,
     )
 
 
-def clear_session_cookie(response: Response) -> None:
-    response.delete_cookie(key=COOKIE_NAME, path=COOKIE_PATH)
+def clear_session_cookie(response: Response, settings: Settings | None = None) -> None:
+    cfg = settings or get_settings()
+    secure, samesite = cookie_flags(cfg)
+    response.delete_cookie(
+        key=COOKIE_NAME,
+        path=COOKIE_PATH,
+        secure=secure,
+        httponly=True,
+        samesite=samesite,
+    )
 
 
 def require_admin(request: Request, db: Session) -> AdminSession:

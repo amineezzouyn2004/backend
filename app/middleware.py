@@ -9,6 +9,12 @@ from starlette.middleware.base import BaseHTTPMiddleware
 
 from app.config import Settings
 
+_rate_buckets: dict[str, deque[float]] = defaultdict(deque)
+
+
+def reset_rate_limit_state() -> None:
+    _rate_buckets.clear()
+
 
 class RequestContextMiddleware(BaseHTTPMiddleware):
     async def dispatch(
@@ -32,7 +38,7 @@ class RequestGuardMiddleware(BaseHTTPMiddleware):
     def __init__(self, app: object, settings: Settings):
         super().__init__(app)
         self.settings = settings
-        self._requests: dict[str, deque[float]] = defaultdict(deque)
+        self._requests = _rate_buckets
 
     async def dispatch(
         self,
