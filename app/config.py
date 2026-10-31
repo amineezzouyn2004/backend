@@ -4,6 +4,9 @@ from typing import Literal
 from pydantic import Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
+PUBLIC_FRONTEND_ORIGINS = ("https://hanin.cc", "https://www.hanin.cc")
+PUBLIC_TRUSTED_HOSTS = ("api.hanin.cc", "hanin.cc", "www.hanin.cc")
+
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
@@ -98,11 +101,21 @@ class Settings(BaseSettings):
 
     @property
     def cors_origin_list(self) -> list[str]:
-        return [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+        origins = [item.strip() for item in self.cors_origins.split(",") if item.strip()]
+        if self.environment.strip().lower() == "production":
+            for origin in PUBLIC_FRONTEND_ORIGINS:
+                if origin not in origins:
+                    origins.append(origin)
+        return origins
 
     @property
     def trusted_host_list(self) -> list[str]:
-        return [item.strip() for item in self.trusted_hosts.split(",") if item.strip()]
+        hosts = [item.strip() for item in self.trusted_hosts.split(",") if item.strip()]
+        if self.environment.strip().lower() == "production":
+            for host in PUBLIC_TRUSTED_HOSTS:
+                if host not in hosts:
+                    hosts.append(host)
+        return hosts
 
     @property
     def trusted_proxy_ip_list(self) -> list[str]:

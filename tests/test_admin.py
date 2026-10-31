@@ -169,10 +169,24 @@ def test_login_cookie_flags_production(
     assert "hanin_admin=" in header.lower()
     assert "httponly" in header.lower()
     assert "secure" in header.lower()
-    assert "samesite=none" in header.lower()
+    assert "samesite=lax" in header.lower()
+    assert "samesite=none" not in header.lower()
     assert "path=/v1/admin" in header.lower()
     assert "domain=" not in header.lower()
     get_settings.cache_clear()
+
+
+def test_production_cors_and_trusted_hosts_include_public_hanin() -> None:
+    settings = _settings(
+        environment="production",
+        cors_origins="https://hanin.cc",
+        trusted_hosts="api.hanin.cc",
+    )
+    assert "https://hanin.cc" in settings.cors_origin_list
+    assert "https://www.hanin.cc" in settings.cors_origin_list
+    assert "api.hanin.cc" in settings.trusted_host_list
+    assert "hanin.cc" in settings.trusted_host_list
+    assert "www.hanin.cc" in settings.trusted_host_list
 
 
 def test_login_cors_credentials(client: TestClient, admin_env: None) -> None:

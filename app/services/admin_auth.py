@@ -130,15 +130,14 @@ def load_session(db: Session, token: str | None) -> AdminSession | None:
 
 
 def cookie_flags(settings: Settings) -> tuple[bool, Literal["lax", "none"]]:
-    """Host-only cookie on the API host (api.hanin.cc).
+    """Host-only cookie. Do not set Domain — JS must never read the token.
 
-    The admin UI on https://hanin.cc is a different origin, so credentialed
-    fetch only attaches this cookie when SameSite=None; Secure. Do not set
-    Domain=.hanin.cc — JS on hanin.cc must never read the token.
-    Path=/v1/admin covers login, me, metrics, orders, and logout.
+    Production admin fetch is same-origin via the hanin.cc /v1 Next rewrite,
+    so SameSite=Lax is enough. Secure is required on HTTPS. Path=/v1/admin
+    covers login, me, metrics, orders, and logout.
     """
     if settings.environment.strip().lower() == "production":
-        return True, "none"
+        return True, "lax"
     return False, "lax"
 
 
