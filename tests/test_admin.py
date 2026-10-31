@@ -15,6 +15,7 @@ from app.integrations.geoip.lookup import (
     is_accepted_morocco,
 )
 from app.main import app
+from app.models.admin import AdminSession
 from app.models.analytics import AnalyticsEvent
 from app.models.order import OrderStatus
 from app.schemas.order import OrderCreate
@@ -83,6 +84,31 @@ def _order_payload(city: str | None = None) -> OrderCreate:
         city=city,
         items=[{"product_slug": "smart-baby-lamp", "offer_code": "OFFER_1"}],
     )
+
+
+def test_login_missing_admin_sessions_is_503(
+    client: TestClient, admin_env: None, db_engine
+) -> None:
+    AdminSession.__table__.drop(db_engine)
+    response = client.post(
+        "/v1/admin/login",
+        json={"username": "hanin-ops", "password": "test-admin-password"},
+    )
+    assert response.status_code == 503
+    body = response.json()
+    assert body["code"] == "ADMIN_SESSIONS_UNAVAILABLE"
+    assert "جدول الجلسات غير جاهز" in body["detail"]
+    assert "Traceback" not in response.text
+
+
+def test_me_missing_admin_sessions_is_503_not_500(
+    client: TestClient, admin_env: None, db_engine
+) -> None:
+    AdminSession.__table__.drop(db_engine)
+    response = client.get("/v1/admin/me", cookies={"hanin_admin": "opaque-token"})
+    assert response.status_code == 503
+    assert response.json()["code"] == "ADMIN_SESSIONS_UNAVAILABLE"
+    assert "Traceback" not in response.text
 
 
 def test_login_rejected_when_admin_env_unset(client: TestClient) -> None:

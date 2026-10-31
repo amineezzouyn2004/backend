@@ -9,6 +9,7 @@ from typing import Literal
 
 from fastapi import Request, Response
 from sqlalchemy import select
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
@@ -84,6 +85,35 @@ def raise_if_admin_disabled(settings: Settings | None = None) -> None:
         )
 
 
+def _exception_blob(exc: BaseException) -> str:
+    chunks = [str(exc)]
+    current: BaseException | None = exc
+    for _ in range(5):
+        current = current.__cause__ or current.__context__
+        if current is None:
+            break
+        chunks.append(str(current))
+    return " ".join(chunks).lower()
+
+
+def reraise_if_admin_sessions_missing(exc: BaseException) -> None:
+    blob = _exception_blob(exc)
+    missing = (
+        "no such table" in blob
+        or "does not exist" in blob
+        or "undefinedtable" in blob
+    )
+    if "admin_sessions" not in blob or not missing:
+        return
+    logger.warning("admin_sessions_table_missing")
+    raise DomainProblem(
+        503,
+        "ADMIN_SESSIONS_UNAVAILABLE",
+        "جدول الجلسات غير جاهز",
+        "جدول الجلسات غير جاهز.",
+    ) from exc
+
+
 def create_session(db: Session, username: str, settings: Settings) -> str:
     token = secrets.token_urlsafe(32)
     now = datetime.now(timezone.utc)
@@ -94,7 +124,12 @@ def create_session(db: Session, username: str, settings: Settings) -> str:
         expires_at=now + timedelta(hours=settings.admin_session_hours),
     )
     db.add(session)
-    db.commit()
+    try:
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        reraise_if_admin_sessions_missing(exc)
+        raise
     logger.info("admin_session_created")
     return token
 
@@ -102,22 +137,31 @@ def create_session(db: Session, username: str, settings: Settings) -> str:
 def revoke_session(db: Session, token: str | None) -> None:
     if not token:
         return
-    session = db.scalar(
-        select(AdminSession).where(AdminSession.token_hash == _sha256_hex(token))
-    )
-    if session is None or session.revoked_at is not None:
-        return
-    session.revoked_at = datetime.now(timezone.utc)
-    db.commit()
+    try:
+        session = db.scalar(
+            select(AdminSession).where(AdminSession.token_hash == _sha256_hex(token))
+        )
+        if session is None or session.revoked_at is not None:
+            return
+        session.revoked_at = datetime.now(timezone.utc)
+        db.commit()
+    except SQLAlchemyError as exc:
+        db.rollback()
+        reraise_if_admin_sessions_missing(exc)
+        raise
     logger.info("admin_session_revoked")
 
 
 def load_session(db: Session, token: str | None) -> AdminSession | None:
     if not token:
         return None
-    session = db.scalar(
-        select(AdminSession).where(AdminSession.token_hash == _sha256_hex(token))
-    )
+    try:
+        session = db.scalar(
+            select(AdminSession).where(AdminSession.token_hash == _sha256_hex(token))
+        )
+    except SQLAlchemyError as exc:
+        reraise_if_admin_sessions_missing(exc)
+        raise
     if session is None or session.revoked_at is not None:
         return None
     now = datetime.now(timezone.utc)
